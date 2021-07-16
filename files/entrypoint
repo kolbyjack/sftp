@@ -11,6 +11,10 @@ reArgSkip='^([[:blank:]]*#.*|[[:blank:]]*)$' # comment or empty line
 userConfPath="/etc/sftp/users.conf"
 userConfPathLegacy="/etc/sftp-users.conf"
 userConfFinalPath="/var/run/sftp/users.conf"
+ed25519HostKeyPersistedPath="/config/ssh_host_ed25519_key"
+ed25519HostKeyRuntimePath="/etc/ssh/ssh_host_ed25519_key"
+rsaHostKeyPersistedPath="/config/ssh_host_rsa_key"
+rsaHostKeyRuntimePath="/etc/ssh/ssh_host_rsa_key"
 
 function log() {
     echo "[$0] $*" >&2
@@ -64,17 +68,27 @@ if [ ! -f "$userConfFinalPath" ]; then
         exit 3
     fi
 
-    # Generate unique ssh keys for this container, if needed
-    if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
-        ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N ''
+    # Generate or restore ssh keys for this container, if needed
+    if [ ! -f "$ed25519HostKeyRuntimePath" ]; then
+        if [ -f "$ed25519HostKeyPersistedPath" ]; then
+            cp "$ed25519HostKeyPersistedPath" "$ed25519HostKeyRuntimePath"
+        else
+            ssh-keygen -t ed25519 -f "$ed25519HostKeyRuntimePath" -N ''
+            cp "$ed25519HostKeyRuntimePath" "$ed25519HostKeyPersistedPath"
+        fi
     fi
-    if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
-        ssh-keygen -t rsa -b 4096 -f /etc/ssh/ssh_host_rsa_key -N ''
+    if [ ! -f "$rsaHostKeyRuntimePath" ]; then
+        if [ -f "$rsaHostKeyPersistedPath" ]; then
+            cp "$rsaHostKeyPersistedPath" "$rsaHostKeyRuntimePath"
+        else
+            ssh-keygen -t rsa -b 4096 -f "$rsaHostKeyRuntimePath" -N ''
+            cp "$rsaHostKeyRuntimePath" "$rsaHostKeyPersistedPath"
+        fi
     fi
 
     # Restrict access from other users
-    chmod 600 /etc/ssh/ssh_host_ed25519_key || true
-    chmod 600 /etc/ssh/ssh_host_rsa_key || true
+    chmod 600 "$ed25519HostKeyRuntimePath" || true
+    chmod 600 "$rsaHostKeyRuntimePath" || true
 fi
 
 # Source custom scripts, if any
